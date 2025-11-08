@@ -1,0 +1,36 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# === Environnement virtuel Python ===
+bin/
+lib/
+lib64/
+include/
+pyvenv.cfg
+.venv/
+venv/
+env/
+ENV/
+
+# === Cache Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+
+# === Fichiers temporaires ===
+*.log
+*.tmp
+*.bak
+
+# === Fichiers de configuration personnels ===
+*.env
+*.ini
+*.cfg
+
+# === Fichiers système ===
+.DS_Store
+Thumbs.db
+
+# === Dossiers de build ou de distribution (si jamais tu en ajoutes) ===
+build/
+dist/
+*.egg-info/
+
