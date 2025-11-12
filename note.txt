@@ -1,0 +1,39 @@
+format de return:
+1.CREATE:
+{
+    "type": "CREATE_TABLE",
+    "table_name": "Commandes",
+    "columns": [
+        {
+            "name": "id",
+            "type": "INT",
+            "constraints": [
+                "AUTO_INCREMENT",
+                "PRIMARY",
+                "KEY"
+            ]
+        },
+        {
+            "name": "produit",
+            "type": "VARCHAR(100)",
+            "constraints": [
+                "NOT",
+                "NULL"
+            ]
+        },
+        {
+            "name": "id_utilisateur",
+            "type": "INT",
+            "constraints": []
+        }
+    ],
+    "constraints": [
+        {
+            "type": "FOREIGN_KEY",
+            "column_name": "id_utilisateur",
+            "referenced_table": "Utilisateurs",
+            "referenced_column": "id",
+            "on_delete": "CASCADE"
+        }
+    ]
+}
