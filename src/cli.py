@@ -13,7 +13,7 @@ style = Style.from_dict({
 })
 
 # --- COMMANDES ---
-commands = ["CREATE", "SELECT", "INSERT", "UPDATE", "DELETE", "SHOW", "EXIT", "HELP"]
+commands = ["CREATE", "SELECT", "INSERT", "UPDATE", "DELETE", "SHOW", "EXIT", "HELP", "DROP", "USE"]
 key_words = ["TABLE", "DATABASE", "SET", "VALUE"]
 commands.extend(key_words)
 completer = WordCompleter(commands, ignore_case=True, sentence=True)
@@ -27,7 +27,8 @@ SYNTAX_HINTS = {
     "UPDATE": "UPDATE nom_table SET colonne=valeur WHERE condition;",
     "DELETE": "DELETE FROM nom_table WHERE condition;",
     "SHOW T": "SHOW TABLES;",
-    "SHOW D": "SHOW DATABASES"
+    "SHOW D": "SHOW DATABASES",
+    "USE" : "DATABASE",
 }
 
 

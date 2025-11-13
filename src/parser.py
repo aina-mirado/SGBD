@@ -18,6 +18,9 @@ def normalize_query(query: str) -> str:
 def analyseSyntax(query):
     tokens = [token.strip().upper() for token in query.split()]
 
+    if len(tokens) <= 2 :
+        return parse_cmd(query,tokens)
+    
     if tokens[0] == "CREATE":
         if tokens[1] == "TABLE":
             return parse_create_table(query, tokens)        
@@ -35,8 +38,10 @@ def analyseSyntax(query):
     if tokens[0] == "UPDATE":
         return parse_update(query, tokens)
     
-import re
-
+    if tokens[0] == "DROP":
+        return parse_drop(query, tokens)
+    
+    
 def parse_create_table(query, tokens):
     if len(tokens) < 3 or tokens[1].upper() != "TABLE":
         print("Erreur de syntaxe CREATE TABLE incorrecte.")
@@ -152,7 +157,7 @@ def parse_create_table(query, tokens):
         })
 
     return {
-        "type": "CREATE_TABLE",
+        "action": "CREATE_TABLE",
         "table_name": table_name,
         "columns": columns,
         "constraints": constraints
@@ -172,7 +177,7 @@ def parse_create_database(query, tokens):
     db_name = match.group(2)
 
     return {
-        "type": "CREATE_DATABASE",
+        "action": "CREATE_DATABASE",
         "database_name": db_name,
         "if_not_exists": if_not_exists
     }
@@ -204,7 +209,7 @@ def parse_insert(query, tokens):
         return None
 
     return {
-        "type": "INSERT",
+        "action": "INSERT",
         "table_name": table_name,
         "columns": columns,
         "values": values
@@ -236,12 +241,13 @@ def parse_delete(query, tokens):
          print("Attention: DELETE sans clause WHERE. Toutes les lignes seront supprimées.")
 
     return {
-        "type": "DELETE",
+        "action": "DELETE",
         "table_name": table_name,
         "condition": condition  # La chaîne de condition (ex: "age > 30")
     }
     
 def parse_update(query, tokens):
+
     if len(tokens) < 4 or tokens[2].upper() != "SET":
         print("Erreur de syntaxe UPDATE incorrecte.")
         return None
@@ -279,8 +285,56 @@ def parse_update(query, tokens):
     condition = where_clause_str.strip() if where_clause_str else None
 
     return {
-        "type": "UPDATE",
+        "action": "UPDATE",
         "table_name": table_name,
         "assignments": assignments,  # Dictionnaire {colonne: nouvelle_valeur}
         "condition": condition
     }
+
+def parse_cmd(query, tokens):
+    action = tokens[0].upper()
+
+    if len(tokens) == 2:
+        return {
+            'action': action,
+            'argument' : query.split()[1].strip(';')
+        }
+    if len(tokens) == 1:
+        return {
+            'action': action
+        }
+    return None
+
+def parse_drop(query, tokens):
+    """
+    Supporte:
+      - DROP DATABASE [IF EXISTS] name
+      - DROP TABLE [IF EXISTS] [db.]table
+    Retourne dict minimal ou None si non reconnu.
+    """
+    m = re.match(
+        r"DROP\s+(DATABASE|TABLE)\s+(IF\s+EXISTS\s+)?(`[^`]+`|'[^']+'|\"[^\"]+\"|[\w\.]+)\s*;?$",
+        query, re.IGNORECASE
+    )
+    if not m:
+        return None
+    kind = m.group(1).upper()
+    if_exists = bool(m.group(2))
+    name = m.group(3)
+    if name and (name[0] == name[-1]) and name[0] in ("'", '"', '`'):
+        name = name[1:-1]
+
+    if kind == "DATABASE":
+        return {
+            "action": "DROP_DATABASE",
+              "database_name": name, 
+              "if_exists": if_exists}
+    # TABLE (possibilité db.table)
+    if "." in name:
+        db, tbl = name.split(".", 1)
+    else:
+        db, tbl = None, name
+    return {
+        "action": "DROP_TABLE", 
+        "table_name": tbl, "database": db, 
+        "if_exists": if_exists}
