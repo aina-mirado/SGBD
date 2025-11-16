@@ -101,7 +101,7 @@ def parse_create_table(query, tokens):
 
         # 1) Constraint table-level FOREIGN KEY (optionnel CONSTRAINT nom)
         fk_table = re.match(
-            r"^(?:CONSTRAINT\s+(\w+)\s+)?FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(\w+)\s*\(([^)]+)\)(?:\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION))?",
+            r"^(?:CONSTRAINT\s+(\w+)\s+)?FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(\w+)\s*\(([^)]+)\)",
             up, re.IGNORECASE | re.DOTALL
         )
         if fk_table:
@@ -109,15 +109,26 @@ def parse_create_table(query, tokens):
             local_cols = [c.strip() for c in fk_table.group(2).split(',')]
             ref_table = fk_table.group(3)
             ref_cols = [c.strip() for c in fk_table.group(4).split(',')]
-            on_delete = fk_table.group(5).replace(" ", "_").upper() if fk_table.group(5) else "NO_ACTION"
-            constraints.append({
+
+            # détecter ON DELETE et ON UPDATE indépendamment (ordre libre, optionnels)
+            on_delete_m = re.search(r"ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION)", up, re.IGNORECASE)
+            on_update_m = re.search(r"ON\s+UPDATE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION)", up, re.IGNORECASE)
+            on_delete = on_delete_m.group(1).upper().replace(" ", "_") if on_delete_m else None
+            on_update = on_update_m.group(1).upper().replace(" ", "_") if on_update_m else None
+
+            entry = {
                 "type": "FOREIGN_KEY",
                 "name": constraint_name,
                 "columns": local_cols,
                 "referenced_table": ref_table,
                 "referenced_columns": ref_cols,
-                "on_delete": on_delete
-            })
+            }
+            if on_delete:
+                entry["on_delete"] = on_delete
+            if on_update:
+                entry["on_update"] = on_update
+
+            constraints.append(entry)
             continue
 
         # 2) Colonne possible avec REFERENCES inline
@@ -128,25 +139,35 @@ def parse_create_table(query, tokens):
             continue
 
         # cherche un REFERENCES inline dans la définition
-        fk_inline = re.search(r"REFERENCES\s+(\w+)\s*\(([^)]+)\)(?:\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION))?",
-                              up, re.IGNORECASE | re.DOTALL)
+        fk_inline = re.search(r"REFERENCES\s+(\w+)\s*\(([^)]+)\)", up, re.IGNORECASE | re.DOTALL)
         if fk_inline:
             ref_table = fk_inline.group(1)
             ref_cols = [c.strip() for c in fk_inline.group(2).split(',')]
-            on_delete = fk_inline.group(3).replace(" ", "_").upper() if fk_inline.group(3) else "NO_ACTION"
+
+            # détecter ON DELETE / ON UPDATE pour la définition inline
+            on_delete_m = re.search(r"ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION)", up, re.IGNORECASE)
+            on_update_m = re.search(r"ON\s+UPDATE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION)", up, re.IGNORECASE)
+            on_delete = on_delete_m.group(1).upper().replace(" ", "_") if on_delete_m else None
+            on_update = on_update_m.group(1).upper().replace(" ", "_") if on_update_m else None
+
             # ajoute la colonne et la contrainte correspondante
             columns.append({
                 "name": col_name,
                 "type": col_type,
                 "constraints": [c.upper() for c in col_cons if c]
             })
-            constraints.append({
+            fk_entry = {
                 "type": "FOREIGN_KEY",
                 "columns": [col_name],
                 "referenced_table": ref_table,
                 "referenced_columns": ref_cols,
-                "on_delete": on_delete
-            })
+            }
+            if on_delete:
+                fk_entry["on_delete"] = on_delete
+            if on_update:
+                fk_entry["on_update"] = on_update
+
+            constraints.append(fk_entry)
             continue
 
         # sinon colonne normale

@@ -9,6 +9,7 @@ pyvenv.cfg
 venv/
 env/
 ENV/
+Data/
 
 # === Cache Python ===
 __pycache__/

@@ -1,7 +1,7 @@
 format de return:
 1.CREATE:
 {
-    "type": "CREATE_TABLE",
+    "action": "CREATE_TABLE",
     "table_name": "Commandes",
     "columns": [
         {
@@ -37,3 +37,14 @@ format de return:
         }
     ]
 }
+
+    foreign_key: [
+        {
+            "column_name": "id_utilisateur",
+            "referenced_table": "Utilisateurs",
+            "referenced_column": "id",
+            "on_delete": "CASCADE", 
+            "on_update": "CASCADE"
+
+        }
+    ]

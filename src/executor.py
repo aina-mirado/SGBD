@@ -48,12 +48,11 @@ def set_current_db(name: str) -> bool:
 def clear_current_db() -> bool:
     return _write_current_db_file(None)
 
-def showResult(result):
-    print("RESULT:", result)
+
 
 def executor(parsed: dict):
     if not parsed:
-        showResult({"error": "no_parsed_input"})
+        print("no_parsed_input")
         return
 
     t = parsed.get("action") or parsed.get("type")
@@ -63,33 +62,27 @@ def executor(parsed: dict):
         if_not_exists = bool(parsed.get("if_not_exists", False))
         db = Database(db_name)
         result = db.create_db(if_not_exists=if_not_exists)
-        showResult(result)
         return result
 
     if t == "USE":
         db_name = parsed.get("argument")
         if not db_name:
-            showResult({"action": "USE", "success": False, "error": "no_database_name"})
             return {"success": False, "error": "no_database_name"}
 
         # vérifier que la DB existe
         existing = Database.list_databases_at()
         if db_name not in existing:
-            showResult({"action": "USE", "success": False, "error": "database_not_found", "database": db_name})
             return {"success": False, "error": "database_not_found", "database": db_name}
 
         ok = set_current_db(db_name)
         if ok:
-            showResult({"action": "USE", "success": True, "database": db_name})
             return {"success": True, "database": db_name}
         else:
-            showResult({"action": "USE", "success": False, "error": "io_error"})
             return {"success": False, "error": "io_error"}
 
-    if t == "SHOW":
+    if t == "SHOW" and parsed.get("argument").upper() == "DATABASES":
         dbs = Database.list_databases_at()
-        showResult({"action": "SHOW_DATABASES", "databases": dbs})
-        return {"databases": dbs}
+        return {"databases": dbs}            
     
     if t == "DROP_DATABASE":
         name = parsed.get("database_name")
@@ -100,14 +93,39 @@ def executor(parsed: dict):
                 res = {"action": "DROP_DATABASE", "database": name, "dropped": False, "skipped": True}
             else:
                 res = {"action": "DROP_DATABASE", "database": name, "dropped": False, "error": "not_found"}
-            showResult(res); return res
+            return res
         ok = db.remove_db()
         res = {"action": "DROP_DATABASE", "database": name, "dropped": bool(ok)}
-        showResult(res); return res
+        return res
     
-    showResult({"error": "unsupported_action", "action": t})
+    if t == "CREATE_TABLE":
+        dbname = get_current_db()
+        if not dbname:
+            res = {"action": "CREATE_TABLE", "created": False, "error": "no_database_selected"}
+            return res
+
+        db = Database(dbname)
+        try:
+            result = db.create_table(parsed)
+        except Exception as e:
+            result = {"action": "CREATE_TABLE", "created": False, "error": "exception", "detail": str(e)}
+
+        return result
+    
+    if t == "SHOW" and parsed.get("argument").upper() == "TABLES":
+        # parsed may include "database" (FROM/IN); fallback to current DB
+        dbname = get_current_db()
+        if not dbname:
+            return {"error": "no_database_selected"}
+        db = Database(dbname)
+        tables = db.show_tables()
+        return {"tables": tables, "database": dbname}
+    
+    
+    
     return {"error": "unsupported_action", "action": t}
 
+    
 # if __name__ == "__main__":
     # test rapide
     # parsed_create = {"action": "CREATE_DATABASE", "database_name": "nomDB", "if_not_exists": True}
