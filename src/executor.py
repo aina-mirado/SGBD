@@ -2,53 +2,15 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+
+
 # ajoute la racine du projet au PYTHONPATH (permet d'importer models depuis src)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from models.databases import Database
+from src.models.databases import Database
+from src.models.table import Table
 
-# fichier pour persister la DB courante
-_CURRENT_DB_FILE = Path(__file__).resolve().parent.parent / "Data" / ".current_db"
-_current_db_cache: Optional[str] = None
-
-def _read_current_db_file() -> Optional[str]:
-    global _current_db_cache
-    if _current_db_cache is not None:
-        return _current_db_cache
-    try:
-        if _CURRENT_DB_FILE.exists():
-            val = _CURRENT_DB_FILE.read_text(encoding="utf-8").strip()
-            _current_db_cache = val or None
-            return _current_db_cache
-    except Exception:
-        return None
-    return None
-
-def _write_current_db_file(name: Optional[str]) -> bool:
-    global _current_db_cache
-    try:
-        _CURRENT_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-        if name is None:
-            if _CURRENT_DB_FILE.exists():
-                _CURRENT_DB_FILE.unlink()
-            _current_db_cache = None
-            return True
-        _CURRENT_DB_FILE.write_text(name, encoding="utf-8")
-        _current_db_cache = name
-        return True
-    except Exception:
-        return False
-
-def get_current_db() -> Optional[str]:
-    return _read_current_db_file()
-
-def set_current_db(name: str) -> bool:
-    return _write_current_db_file(name)
-
-def clear_current_db() -> bool:
-    return _write_current_db_file(None)
-
-
+from src.usefonctions import *
 
 def executor(parsed: dict):
     if not parsed:
@@ -73,7 +35,7 @@ def executor(parsed: dict):
         existing = Database.list_databases_at()
         if db_name not in existing:
             return {"success": False, "error": "database_not_found", "database": db_name}
-
+        clear_current_db()
         ok = set_current_db(db_name)
         if ok:
             return {"success": True, "database": db_name}
@@ -95,8 +57,11 @@ def executor(parsed: dict):
                 res = {"action": "DROP_DATABASE", "database": name, "dropped": False, "error": "not_found"}
             return res
         ok = db.remove_db()
-        res = {"action": "DROP_DATABASE", "database": name, "dropped": bool(ok)}
-        return res
+        if ok:
+            if name == get_current_db():
+                clear_current_db()
+            res = {"action": "DROP_DATABASE", "database": name, "dropped": bool(ok)}
+            return res
     
     if t == "CREATE_TABLE":
         dbname = get_current_db()
@@ -112,16 +77,21 @@ def executor(parsed: dict):
 
         return result
     
-    if t == "SHOW" and parsed.get("argument").upper() == "TABLES":
-        # parsed may include "database" (FROM/IN); fallback to current DB
+    if t == "SHOW" and parsed.get("argument").upper() == "TABLES" :        
+        # dbname = check_current_db_selected()
         dbname = get_current_db()
         if not dbname:
             return {"error": "no_database_selected"}
         db = Database(dbname)
         tables = db.show_tables()
-        return {"tables": tables, "database": dbname}
+        return {"database": dbname, "tables": tables}
     
+    if t == "DESCRIBE":
+        table_name = parsed.get("argument")
+        return Table.describe_table(table_name)
     
+    if t == "INSERT":
+        return Table.insert(parsed)
     
     return {"error": "unsupported_action", "action": t}
 

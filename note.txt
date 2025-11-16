@@ -1,50 +1,7 @@
-format de return:
-1.CREATE:
-{
-    "action": "CREATE_TABLE",
-    "table_name": "Commandes",
-    "columns": [
-        {
-            "name": "id",
-            "type": "INT",
-            "constraints": [
-                "AUTO_INCREMENT",
-                "PRIMARY",
-                "KEY"
-            ]
-        },
-        {
-            "name": "produit",
-            "type": "VARCHAR(100)",
-            "constraints": [
-                "NOT",
-                "NULL"
-            ]
-        },
-        {
-            "name": "id_utilisateur",
-            "type": "INT",
-            "constraints": []
-        }
-    ],
-    "constraints": [
-        {
-            "type": "FOREIGN_KEY",
-            "column_name": "id_utilisateur",
-            "referenced_table": "Utilisateurs",
-            "referenced_column": "id",
-            "on_delete": "CASCADE"
-        }
-    ]
-}
+l'INSERT supporte :
 
-    foreign_key: [
-        {
-            "column_name": "id_utilisateur",
-            "referenced_table": "Utilisateurs",
-            "referenced_column": "id",
-            "on_delete": "CASCADE", 
-            "on_update": "CASCADE"
+data type:
+"INT, FLOAT, VARCHAR(), TEXT, TIMESTAMP" 
 
-        }
-    ]
+contrainte:
+"PRIMARY_KEY, NOT_NULL,AUTO_INCREMENT, UNIQUE, DEFAULT

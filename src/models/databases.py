@@ -225,3 +225,14 @@ class Database:
             return [t.get("name") for t in rules.get("tables", []) if t.get("name")]
         except Exception:
             return []
+    
+    def describe_tables(self) -> List[Dict[str, Any]]:
+        try:
+            if not self._rules_file.exists():
+                return []
+            import json
+            with open(self._rules_file, "r", encoding="utf-8") as f:
+                rules = json.load(f)
+            return [t for t in rules.get("tables", []) if isinstance(t, dict)]
+        except Exception:
+            return []

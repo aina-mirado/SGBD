@@ -1,3 +1,9 @@
+
+#ces fonction sont des backups
+
+import json
+
+
 def parse_create_table(query, tokens):
 
     if len(tokens) < 3 or tokens[1].upper() != "TABLE":

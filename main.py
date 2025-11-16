@@ -16,7 +16,7 @@ def main():
     print("Bienvenue dans le mini SGBD CLI (tape 'HELP' pour la liste des commandes)")
     for query in cli():
         parsed = parser(query)
-        print(parsed)
+        # print(parsed)
         result = executor(parsed)
         showResult(result)
 

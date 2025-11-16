@@ -5,6 +5,8 @@ from prompt_toolkit.styles import Style # type: ignore
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.layout.processors import Processor, Transformation
 
+from src.usefonctions import clear_current_db, get_current_db
+
 # --- STYLE COMPATIBLE ---
 style = Style.from_dict({
     "prompt": "bold #00ffff",   
@@ -13,7 +15,7 @@ style = Style.from_dict({
 })
 
 # --- COMMANDES ---
-commands = ["CREATE", "SELECT", "INSERT", "UPDATE", "DELETE", "SHOW", "EXIT", "HELP", "DROP", "USE"]
+commands = ["CREATE", "SELECT", "INSERT", "UPDATE", "DELETE", "SHOW", "EXIT", "HELP", "DROP", "USE", "DESCRIBE"]
 key_words = ["TABLE", "DATABASE", "SET", "VALUE"]
 commands.extend(key_words)
 completer = WordCompleter(commands, ignore_case=True, sentence=True)
@@ -26,9 +28,9 @@ SYNTAX_HINTS = {
     "INSERT": "INSERT INTO nom_table VALUES (...);",
     "UPDATE": "UPDATE nom_table SET colonne=valeur WHERE condition;",
     "DELETE": "DELETE FROM nom_table WHERE condition;",
-    "SHOW T": "SHOW TABLES;",
-    "SHOW D": "SHOW DATABASES",
+    "SHOW": "SHOW TABLES/DATABASES;",
     "USE" : "DATABASE",
+    "DESCRIBE" : "nom_table"
 }
 
 
@@ -58,8 +60,9 @@ def cli():
 
     while True:
         try:
+            db_current = get_current_db(force_reload=True)
             user_input = session.prompt(
-                HTML("<prompt>MYPROMPT</prompt><arrow> ➜ </arrow> "),
+                HTML(f"<prompt>MYPROMPT ({db_current}) </prompt><arrow> ➜ </arrow> "),
                 completer=completer,
                 complete_while_typing=True,
                 complete_style=CompleteStyle.MULTI_COLUMN,
@@ -73,6 +76,7 @@ def cli():
             cmd = user_input.upper().split()[0]
 
             if cmd in ["EXIT", "QUIT"]:
+                clear_current_db()
                 print("Fermeture du CLI...")
                 break
             elif cmd == "HELP":
