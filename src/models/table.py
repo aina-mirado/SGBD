@@ -94,7 +94,7 @@ class Table:
         return raw
 
     @staticmethod
-    def _check_data_type(value: Any, type_str: str) -> (Any, bool, Optional[str]):
+    def _check_data_type(value: Any, type_str: str) :
         """
         Validate/convert value according to supported types:
         INT, FLOAT, VARCHAR(n), TEXT, TIMESTAMP
@@ -125,7 +125,7 @@ class Table:
             return None, False, "type conversion failed"
 
     @staticmethod
-    def _check_constraints(col_meta: Dict[str, Any], value: Any, rows: List[Dict[str, Any]], column_name: str) -> (Any, bool, Optional[str]):
+    def _check_constraints(col_meta: Dict[str, Any], value: Any, rows: List[Dict[str, Any]], column_name: str) :
         """
         Apply constraints: PRIMARY_KEY, NOT_NULL, AUTO_INCREMENT, UNIQUE, DEFAULT, CURRENT_TIMESTAMP.
         Returns (value_maybe_modified, ok, error_msg)
@@ -475,3 +475,169 @@ class Table:
             "rows": rows
         }
 
+    @staticmethod
+    def delete_in_table(parsed: Dict[str, Any], db_name: Optional[str] = None, base_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Supprime des lignes d'une table selon une condition WHERE optionnelle.
+        parsed attendu:
+          {"action":"DELETE","table_name":"T","condition":"col1=val1 AND col2=val2"} (optionnel)
+        Si condition est None/absent, supprime TOUTES les lignes.
+        Retourne: {"deleted":True, "count": n_deleted} ou {"deleted":False, "error": "..."}
+        """
+        import pandas as pd
+        import re
+
+        base = Path(base_path) if base_path else Path.cwd() / "Data"
+        table_name = parsed.get("table") or parsed.get("table_name")
+        if not table_name:
+            return {"deleted": False, "error": "no_table_name"}
+
+        db_name = db_name or get_current_db()
+        if not db_name:
+            return {"deleted": False, "error": "no_database_selected"}
+
+        schema = Table.describe_table(table_name, db_name=db_name, base_path=base_path)
+        if not schema:
+            return {"deleted": False, "error": "table_not_found"}
+
+        csv_file = base / db_name / f"{table_name}.csv"
+        if not csv_file.exists():
+            return {"deleted": False, "error": "table_data_file_not_found"}
+
+        # read csv
+        try:
+            df = pd.read_csv(csv_file, keep_default_na=False)
+        except Exception as e:
+            return {"deleted": False, "error": "io_error", "detail": str(e)}
+
+        initial_count = len(df)
+
+        # apply WHERE condition if provided
+        condition = parsed.get("condition")
+        if condition:
+            try:
+                # convert SQL syntax to pandas query syntax
+                q = condition
+                q = re.sub(r"<>", "!=", q)
+                q = re.sub(r"(?<=[^\!<>=])=(?=[^=])", "==", q)
+                q = re.sub(r"\bAND\b", " and ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bOR\b", " or ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bNOT\b", " not ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bTRUE\b", "True", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bFALSE\b", "False", q, flags=re.IGNORECASE)
+                
+                # keep rows that DON'T match the condition (inverse of query)
+                mask = df.eval(q)
+                df = df[~mask]
+            except Exception as e:
+                return {"deleted": False, "error": "condition_evaluation_failed", "detail": str(e)}
+        else:
+            # no condition: delete all rows
+            df = df.iloc[0:0]  # empty dataframe keeping columns
+
+        deleted_count = initial_count - len(df)
+
+        # write back to csv
+        try:
+            import csv
+            with open(csv_file, "w", encoding="utf-8", newline='') as f:
+                df.to_csv(f, index=False, quoting=csv.QUOTE_MINIMAL)
+        except Exception as e:
+            return {"deleted": False, "error": "io_error", "detail": str(e)}
+
+        return {"deleted": True, "count": deleted_count, "table": table_name}
+
+# ...existing code...
+    @staticmethod
+    def update_value_table(parsed: Dict[str, Any], db_name: Optional[str] = None, base_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Met à jour des lignes dans une table selon une condition WHERE optionnelle.
+        parsed attendu:
+          {"action":"UPDATE","table_name":"T","assignments":{"col1":"val1","col2":"val2"},"condition":"id=1"}
+        Retourne: {"updated":True, "count": n_updated} ou {"updated":False, "error": "..."}
+        """
+
+
+        base = Path(base_path) if base_path else Path.cwd() / "Data"
+        table_name = parsed.get("table") or parsed.get("table_name")
+        if not table_name:
+            return {"updated": False, "error": "no_table_name"}
+
+        db_name = db_name or get_current_db()
+        if not db_name:
+            return {"updated": False, "error": "no_database_selected"}
+
+        schema = Table.describe_table(table_name, db_name=db_name, base_path=base_path)
+        if not schema:
+            return {"updated": False, "error": "table_not_found"}
+
+        cols_meta = schema.get("columns", [])
+        header = [c["name"] for c in cols_meta]
+        meta_map = {c["name"]: c for c in cols_meta}
+
+        csv_file = base / db_name / f"{table_name}.csv"
+        if not csv_file.exists():
+            return {"updated": False, "error": "table_data_file_not_found"}
+
+        # read csv
+        try:
+            df = pd.read_csv(csv_file, keep_default_na=False)
+        except Exception as e:
+            return {"updated": False, "error": "io_error", "detail": str(e)}
+
+        # apply WHERE condition to filter rows
+        condition = parsed.get("condition")
+        mask_update = None
+        if condition:
+            try:
+                q = condition
+                q = re.sub(r"<>", "!=", q)
+                q = re.sub(r"(?<=[^\!<>=])=(?=[^=])", "==", q)
+                q = re.sub(r"\bAND\b", " and ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bOR\b", " or ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bNOT\b", " not ", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bTRUE\b", "True", q, flags=re.IGNORECASE)
+                q = re.sub(r"\bFALSE\b", "False", q, flags=re.IGNORECASE)
+                mask_update = df.eval(q)
+            except Exception as e:
+                return {"updated": False, "error": "condition_evaluation_failed", "detail": str(e)}
+        else:
+            # no condition: update all rows
+            mask_update = pd.Series([True] * len(df))
+
+        # validate and apply assignments
+        assignments = parsed.get("assignments") or {}
+        if not assignments:
+            return {"updated": False, "error": "no_assignments"}
+
+        for col_name, raw_val in assignments.items():
+            if col_name not in meta_map:
+                return {"updated": False, "error": f"unknown_column:{col_name}"}
+
+            col_meta = meta_map[col_name]
+            raw_py = Table._to_python(raw_val)
+            
+            # type check / conversion
+            conv, ok, err = Table._check_data_type(raw_py, col_meta.get("type", ""))
+            if not ok:
+                return {"updated": False, "error": f"type error on {col_name}: {err}"}
+
+            # constraint checks (NOT NULL, UNIQUE, etc.)
+            rows_list = df[mask_update].to_dict('records')
+            val_final, ok2, err2 = Table._check_constraints(col_meta, conv, rows_list, col_name)
+            if not ok2:
+                return {"updated": False, "error": err2}
+
+            # update the column where mask_update is True
+            df.loc[mask_update, col_name] = val_final
+
+        updated_count = mask_update.sum()
+
+        # write back to csv
+        try:
+            with open(csv_file, "w", encoding="utf-8", newline='') as f:
+                df.to_csv(f, index=False, quoting=csv.QUOTE_MINIMAL)
+        except Exception as e:
+            return {"updated": False, "error": "io_error", "detail": str(e)}
+
+        return {"updated": True, "count": int(updated_count), "table": table_name}

@@ -131,6 +131,30 @@ def executor(parsed: dict):
             return Table.select(parsed, db_name=dbname)
         except Exception as e:
             return {"error": "exception", "detail": str(e)}
+        
+    if t == "DELETE":
+        tbl = parsed.get("table_name")
+        if not tbl:
+            return {"deleted": False, "error": "no_table_name"}
+        dbn = parsed.get("database") or get_current_db()
+        if not dbn:
+            return {"deleted": False, "error": "no_database_selected"}
+        try:
+            return Table.delete_in_table(parsed, db_name=dbn)
+        except Exception as e:
+            return {"deleted": False, "error": "exception", "detail": str(e)}
     
+    if t == "UPDATE":
+        tbl = parsed.get("table_name")
+        if not tbl:
+            return {"updated": False, "error": "no_table_name"}
+        dbn = parsed.get("database") or get_current_db()
+        if not dbn:
+            return {"updated": False, "error": "no_database_selected"}
+        try:
+            return Table.update_value_table(parsed, db_name=dbn)
+        except Exception as e:
+            return {"updated": False, "error": "exception", "detail": str(e)}
+        
     return {"error": "unsupported_action", "action": t}
 

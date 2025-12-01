@@ -295,69 +295,6 @@ def parse_insert(query, tokens):
         "values": values
     }
 
-def parse_delete(query, tokens):
-    if len(tokens) < 3 or tokens[1].upper() != "FROM":
-        print("Erreur de syntaxe DELETE FROM incorrecte.")
-        return None
-    
-    match = re.match(r"DELETE\s+FROM\s+(\w+)\s*(.*)", query, re.IGNORECASE)
-    if not match:
-        print("Erreur de syntaxe DELETE FROM. Vérifiez le nom de la table.")
-        return None
-
-    table_name = match.group(1)
-    where_clause = match.group(2).strip()
-
-    condition = None
-    if where_clause and where_clause.upper().startswith("WHERE"):
-        condition = where_clause[5:].strip()
-    
-    if not condition and len(tokens) > 3:
-         print("Attention: DELETE sans clause WHERE. Toutes les lignes seront supprimées.")
-
-    return {
-        "action": "DELETE",
-        "table_name": table_name,
-        "condition": condition
-    }
-    
-def parse_update(query, tokens):
-    if len(tokens) < 4 or tokens[2].upper() != "SET":
-        print("Erreur de syntaxe UPDATE incorrecte.")
-        return None
-
-    match = re.match(r"UPDATE\s+(\w+)\s+SET\s+(.*?)(?:\s+WHERE\s+(.*))?$", query, re.IGNORECASE | re.DOTALL)
-    if not match:
-        print("Erreur de syntaxe UPDATE. Vérifiez la clause SET.")
-        return None
-
-    table_name = match.group(1)
-    set_assignments_str = match.group(2)
-    where_clause_str = match.group(3)
-
-    assignments = {}
-    try:
-        for assignment in set_assignments_str.split(','):
-            parts = [p.strip() for p in assignment.split('=', 1)]
-            if len(parts) == 2:
-                col_name = parts[0]
-                col_value = parts[1].strip().strip("'\"")
-                assignments[col_name] = col_value
-            else:
-                raise ValueError("Format d'assignation SET incorrect.")
-    except ValueError as e:
-        print(f"Erreur d'analyse SET: {e}")
-        return None
-
-    condition = where_clause_str.strip() if where_clause_str else None
-
-    return {
-        "action": "UPDATE",
-        "table_name": table_name,
-        "assignments": assignments,
-        "condition": condition
-    }
-
 def parse_cmd(query, tokens):
     action = tokens[0].upper()
     if len(tokens) == 2:
@@ -484,4 +421,84 @@ def parse_select(query, tokens):
         "having": having,
         "order_by": order_by,
         "limit": limit_parsed
+    }
+
+def parse_delete(query, tokens):
+    """
+    Supporte:
+      DELETE FROM table [WHERE condition];
+    condition est optionnelle (si absent, supprime tout).
+    """
+    if len(tokens) < 3 or tokens[1].upper() != "FROM":
+        print("Erreur de syntaxe DELETE FROM incorrecte.")
+        return None
+    
+    match = re.match(r"DELETE\s+FROM\s+(\w+)\s*(.*)", query, re.IGNORECASE)
+    if not match:
+        print("Erreur de syntaxe DELETE FROM. Vérifiez le nom de la table.")
+        return None
+
+    table_name = match.group(1)
+    rest = match.group(2).strip().rstrip(';')
+
+    condition = None
+    if rest and rest.upper().startswith("WHERE"):
+        condition = rest[5:].strip()
+        if not condition:
+            print("Attention: WHERE vide. Aucune condition spécifiée.")
+    elif rest:
+        print(f"Attention: texte ignoré après table: {rest}")
+    
+    if not condition:
+        print("Attention: DELETE sans clause WHERE. Toutes les lignes seront supprimées.")
+
+    return {
+        "action": "DELETE",
+        "table_name": table_name,
+        "condition": condition
+    }
+
+def parse_update(query, tokens):
+    """
+    Supporte:
+      UPDATE table SET col1=val1, col2=val2 [WHERE condition];
+    condition est optionnelle.
+    """
+    if len(tokens) < 4 or tokens[2].upper() != "SET":
+        print("Erreur de syntaxe UPDATE incorrecte.")
+        return None
+
+    match = re.match(
+        r"UPDATE\s+(\w+)\s+SET\s+(.*?)(?:\s+WHERE\s+(.*))?$",
+        query, re.IGNORECASE | re.DOTALL
+    )
+    if not match:
+        print("Erreur de syntaxe UPDATE. Vérifiez la clause SET.")
+        return None
+
+    table_name = match.group(1)
+    set_assignments_str = match.group(2).strip()
+    where_clause_str = match.group(3)
+
+    assignments = {}
+    try:
+        for assignment in set_assignments_str.split(','):
+            parts = [p.strip() for p in assignment.split('=', 1)]
+            if len(parts) == 2:
+                col_name = parts[0]
+                col_value = parts[1].strip().rstrip(';').strip("'\"")
+                assignments[col_name] = col_value
+            else:
+                raise ValueError("Format d'assignation SET incorrect.")
+    except ValueError as e:
+        print(f"Erreur d'analyse SET: {e}")
+        return None
+
+    condition = where_clause_str.strip().rstrip(';') if where_clause_str else None
+
+    return {
+        "action": "UPDATE",
+        "table_name": table_name,
+        "assignments": assignments,
+        "condition": condition
     }
