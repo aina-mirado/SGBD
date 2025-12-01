@@ -63,6 +63,18 @@ def executor(parsed: dict):
             res = {"action": "DROP_DATABASE", "database": name, "dropped": bool(ok)}
             return res
     
+    if t == "DROP_TABLE":
+        table_name = parsed.get("table_name") or parsed.get("argument")
+        if not table_name:
+            return {"dropped": False, "error": "no_table_name"}
+        dbname = parsed.get("database") or get_current_db()
+        if not dbname:
+            return {"dropped": False, "error": "no_database_selected"}
+        db = Database(dbname)
+        if_exists = bool(parsed.get("if_exists", False))
+        result = db.drop_table(table_name, if_exists=if_exists)
+        return result
+    
     if t == "CREATE_TABLE":
         dbname = get_current_db()
         if not dbname:
@@ -96,15 +108,3 @@ def executor(parsed: dict):
     return {"error": "unsupported_action", "action": t}
 
     
-# if __name__ == "__main__":
-    # test rapide
-    # parsed_create = {"action": "CREATE_DATABASE", "database_name": "nomDB", "if_not_exists": True}
-    # main(parsed_create)
-    # parsed_use = {"action": "USE", "database_name": "nomDB"}
-    # main(parsed_use)
-    # print("current:", get_current_db())
-    # parsed_show = {"action": "SHOW_DATABASES"}
-    # main(parsed_show)
-
-    # parsed_drop = {"action": "DROP_DATABASE", "database_name": "nomDB", "if_exists": True}
-    # main(parsed_drop)

@@ -126,7 +126,7 @@ class Database:
     def create_table(self, table_def: Dict[str, Any]) -> Dict[str, Any]:
         """
         Ajoute la définition de la table dans informationTable.json ET initialise
-        le stockage des données en créant <table_name>.json contenant {"rows": []}.
+        le stockage des données en créant <table_name>.csv contenant l'en-tête (colonnes).
         Vérifie que la table n'existe pas déjà dans informationTable.json ou comme
         fichier de données avant de créer. Retourne un dict résultat.
         """
@@ -176,8 +176,8 @@ class Database:
             if (fk.get("type") or "").upper() == "FOREIGN_KEY":
                 entry = {
                     "column_name": fk.get("columns"),
-                    "referenced_table": fk.get("referenced_table") ,
-                    "referenced_column": fk.get("referenced_columns") ,
+                    "referenced_table": fk.get("referenced_table"),
+                    "referenced_column": fk.get("referenced_columns"),
                 }
                 if fk.get("on_delete"):
                     entry["on_delete"] = fk.get("on_delete").upper()
@@ -192,14 +192,18 @@ class Database:
             "foreign_keys": fk_meta
         }
 
-        # crée/initialise le fichier de données <table>.json (ne pas écraser s'il existe)
-        table_file = self._path / f"{name}.json"
-        if table_file.exists():
+        # crée/initialise le fichier de données <table>.csv (ne pas écraser s'il existe)
+        csv_file = self._path / f"{name}.csv"
+        if csv_file.exists():
             return {"created": False, "error": "table_data_file_exists", "table": name}
 
         try:
-            with open(table_file, "w", encoding="utf-8") as tf:
-                json.dump({"rows": []}, tf, indent=2, ensure_ascii=False)
+            csv_file.parent.mkdir(parents=True, exist_ok=True)
+            import csv
+            with open(csv_file, "w", encoding="utf-8", newline='') as cf:
+                writer = csv.writer(cf)
+                header = [col["name"] for col in cols_meta]
+                writer.writerow(header)
         except Exception as e:
             return {"created": False, "error": "cannot_create_table_file", "detail": str(e)}
 
@@ -210,11 +214,21 @@ class Database:
             with open(self._rules_file, "w", encoding="utf-8") as f:
                 json.dump(rules, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            # rollback en mémoire
-            tables.pop()
+            # rollback: supprimer le fichier csv créé
+            try:
+                if csv_file.exists():
+                    csv_file.unlink()
+            except Exception:
+                pass
+            # retirer l'entrée mémoire si présente
+            if table_entry in tables:
+                try:
+                    tables.remove(table_entry)
+                except Exception:
+                    pass
             return {"created": False, "error": "cannot_write_rules", "detail": str(e)}
 
-        return {"created": True, "table": name, "table_file": str(table_file), "rules_file": str(self._rules_file)}
+        return {"created": True, "table": name, "table_file": str(csv_file), "rules_file": str(self._rules_file)}
 
     def show_tables(self) -> List[str]:
         try:
@@ -230,9 +244,59 @@ class Database:
         try:
             if not self._rules_file.exists():
                 return []
-            import json
             with open(self._rules_file, "r", encoding="utf-8") as f:
                 rules = json.load(f)
             return [t for t in rules.get("tables", []) if isinstance(t, dict)]
         except Exception:
             return []
+
+ 
+
+    def drop_table(self, table_name: str, if_exists: bool = False) -> Dict[str, Any]:
+        """
+        Supprime la table :
+          - efface <table_name>.csv dans la DB courante
+          - supprime l'entrée correspondante dans le fichier de métadonnées (self._rules_file)
+        Retourne un dict simple indiquant le succès ou l'erreur.
+        """
+        try:
+            # vérifie que le répertoire de la DB existe
+            if not self._path.exists():
+                return {"dropped": False, "error": "database_not_found", "database": self._name}
+
+            # charge les règles (si absentes, considère tables = [])
+            rules = {"tables": []}
+            if self._rules_file.exists():
+                with open(self._rules_file, "r", encoding="utf-8") as f:
+                    try:
+                        rules = json.load(f)
+                    except Exception:
+                        rules = {"tables": []}
+
+            tables = rules.setdefault("tables", [])
+            found = next((t for t in tables if t.get("name") == table_name), None)
+
+            if not found and not if_exists:
+                return {"dropped": False, "error": "table_not_found", "table": table_name}
+
+            # supprime le fichier de données (.csv)
+            csv_file = self._path / f"{table_name}.csv"
+            if csv_file.exists():
+                try:
+                    csv_file.unlink()
+                except Exception as e:
+                    return {"dropped": False, "error": "cannot_remove_table_file", "detail": str(e)}
+
+            # supprime l'entrée dans les métadonnées si elle existe
+            if found:
+                rules["tables"] = [t for t in tables if t.get("name") != table_name]
+                try:
+                    self._rules_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self._rules_file, "w", encoding="utf-8") as f:
+                        json.dump(rules, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    return {"dropped": False, "error": "cannot_write_rules", "detail": str(e)}
+
+            return {"dropped": True, "table": table_name}
+        except Exception as e:
+            return {"dropped": False, "error": "exception", "detail": str(e)}
