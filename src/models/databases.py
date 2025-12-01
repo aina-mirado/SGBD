@@ -165,7 +165,7 @@ class Database:
             cname = c.get("name")
             ctype = c.get("type")
             ccons = c.get("constraints", []) or []
-            upper_cons = [tok.upper() for tok in ccons]
+            upper_cons = [str(tok).upper() for tok in ccons]
             if any("PRIMARY" in tok for tok in upper_cons):
                 primary_keys.append(cname)
             cols_meta.append({"name": cname, "type": ctype, "constraints": ccons[:]})

@@ -197,3 +197,103 @@ def create_table(self, table_def: Dict[str, Any]) -> Dict[str, Any]:
             return {"created": False, "error": "cannot_write_rules", "detail": str(e)}
 
         return {"created": True, "table": name}
+
+
+def parse_select(query, tokens):
+    """
+    Supporte une syntaxe proche de MySQL :
+      SELECT [DISTINCT] select_list
+      FROM table_expr
+      [WHERE ...]
+      [GROUP BY col[, ...]]
+      [HAVING ...]
+      [ORDER BY col [ASC|DESC][, ...]]
+      [LIMIT [offset,] count]
+    Renvoie un dict avec clés: action, distinct, columns, from, where, group_by, having, order_by, limit
+    (where/having sont des chaînes brutes pour évaluation ultérieure).
+    """
+    q = query.strip().rstrip(';')
+
+    # helper to split commas au niveau top (ne pas séparer dans les parenthèses)
+    def split_top_commas(s: str):
+        parts, cur, depth, in_s, in_d = [], [], 0, False, False
+        for ch in s:
+            if ch == "'" and not in_d: in_s = not in_s
+            elif ch == '"' and not in_s: in_d = not in_d
+            elif ch == '(' and not in_s and not in_d: depth += 1
+            elif ch == ')' and not in_s and not in_d and depth: depth -= 1
+            if ch == ',' and depth == 0 and not in_s and not in_d:
+                parts.append(''.join(cur).strip()); cur = []
+            else:
+                cur.append(ch)
+        if cur: parts.append(''.join(cur).strip())
+        return [p for p in parts if p]
+
+    # pattern: capture select-list and from until next clause (WHERE/GROUP/HAVING/ORDER/LIMIT/end)
+    rx = re.compile(
+        r"""SELECT\s+(DISTINCT\s+)?(?P<select>.+?)\s+FROM\s+(?P<from>.+?)
+            (?:\s+WHERE\s+(?P<where>.+?))?
+            (?:\s+GROUP\s+BY\s+(?P<group>.+?))?
+            (?:\s+HAVING\s+(?P<having>.+?))?
+            (?:\s+ORDER\s+BY\s+(?P<order>.+?))?
+            (?:\s+LIMIT\s+(?P<limit>.+?))?$
+        """, re.IGNORECASE | re.DOTALL | re.VERBOSE
+    )
+
+    m = rx.match(q)
+    if not m:
+        print("Erreur de syntaxe SELECT.")
+        return None
+
+    distinct = bool(m.group(1))
+    sel = m.group('select').strip()
+    frm = m.group('from').strip()
+    where = m.group('where').strip() if m.group('where') else None
+    grp = m.group('group').strip() if m.group('group') else None
+    having = m.group('having').strip() if m.group('having') else None
+    order = m.group('order').strip() if m.group('order') else None
+    limit = m.group('limit').strip() if m.group('limit') else None
+
+    columns = split_top_commas(sel) if sel != '*' else ['*']
+
+    # FROM: tenter de séparer par virgules au top-level, garder JOINs tels quels
+    # si ' JOIN ' présent, on retourne la chaîne complète pour traitement par executor
+    from_tables = None
+    if re.search(r"\s+JOIN\s+", frm, re.IGNORECASE):
+        from_tables = frm  # leave complex FROM (joins) as string
+    else:
+        from_tables = [t.strip() for t in split_top_commas(frm)]
+
+    group_by = [g.strip() for g in split_top_commas(grp)] if grp else []
+    order_by = []
+    if order:
+        for part in split_top_commas(order):
+            p = part.strip()
+            ps = p.split()
+            col = ps[0]
+            dir = ps[1].upper() if len(ps) > 1 and ps[1].upper() in ("ASC", "DESC") else "ASC"
+            order_by.append({"column": col, "dir": dir})
+
+    limit_parsed = None
+    if limit:
+        # MySQL: LIMIT count OR LIMIT offset,count
+        parts = [x.strip() for x in limit.split(',')]
+        try:
+            if len(parts) == 1:
+                limit_parsed = {"count": int(parts[0])}
+            elif len(parts) == 2:
+                limit_parsed = {"offset": int(parts[0]), "count": int(parts[1])}
+        except Exception:
+            limit_parsed = None
+
+    return {
+        "action": "SELECT",
+        "distinct": distinct,
+        "columns": columns,
+        "from": from_tables,
+        "where": where,
+        "group_by": group_by,
+        "having": having,
+        "order_by": order_by,
+        "limit": limit_parsed
+    }

@@ -103,8 +103,34 @@ def executor(parsed: dict):
         return Table.describe_table(table_name)
     
     if t == "INSERT":
-        return Table.insert(parsed)
+        dbname = parsed.get("database") or get_current_db()
+        if not dbname:
+            return {"inserted": False, "error": "no_database_selected"}
+        try:
+            return Table.insert_into_table(parsed, db_name=dbname)
+        except Exception as e:
+            return {"inserted": False, "error": "exception", "detail": str(e)}
+    
+    if t == "SELECT":
+        import re
+        frm = parsed.get("from")
+        # gérer la notation db.table simple (pas de JOINs complexes)
+        dbname = parsed.get("database") or get_current_db()
+        if isinstance(frm, str) and '.' in frm and not re.search(r"\bJOIN\b", frm, re.I):
+            first = frm.split(',', 1)[0].strip()
+            if '.' in first:
+                db_pref, table_only = first.split('.', 1)
+                dbname = db_pref or dbname
+                rest = ''
+                if ',' in frm:
+                    rest = ',' + frm.split(',', 1)[1]
+                parsed['from'] = table_only + rest
+        if not dbname:
+            return {"error": "no_database_selected"}
+        try:
+            return Table.select(parsed, db_name=dbname)
+        except Exception as e:
+            return {"error": "exception", "detail": str(e)}
     
     return {"error": "unsupported_action", "action": t}
 
-    
